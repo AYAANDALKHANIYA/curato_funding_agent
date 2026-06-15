@@ -1,0 +1,12 @@
+groq>=0.9.0
+feedparser>=6.0.11
+requests>=2.31.0
+beautifulsoup4>=4.12.3
+lxml>=5.1.0
+gspread>=6.1.0
+google-auth>=2.29.0
+schedule>=1.2.2
+python-dotenv>=1.0.1
+streamlit>=1.35.0
+pandas>=2.2.0
+plotly>=5.22.0

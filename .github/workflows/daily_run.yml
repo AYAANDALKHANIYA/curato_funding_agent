@@ -1,0 +1,93 @@
+name: Daily Funding Agent Run
+
+on:
+  schedule:
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual run'
+        required: false
+        default: 'Manual test'
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  run-funding-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Restore dedup DB cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data/seen_leads.db
+          key: dedup-db-${{ github.ref }}-${{ github.run_id }}
+          restore-keys: |
+            dedup-db-${{ github.ref }}-
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Create data and logs directories
+        run: mkdir -p data logs
+
+      - name: Write service account JSON
+        run: echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}' > service_account.json
+
+      - name: Run pipeline
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: service_account.json
+        run: python -m src.pipeline
+
+      - name: Save dedup DB cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data/seen_leads.db
+          key: dedup-db-${{ github.ref }}-${{ github.run_id }}
+
+      - name: Upload pipeline logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-logs-${{ github.run_id }}
+          path: logs/
+          retention-days: 30
+
+      - name: Upload leads CSV
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: leads-csv-${{ github.run_id }}
+          path: data/leads_output.csv
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Report failure
+        if: failure()
+        run: echo "Pipeline failed! Check the logs here -> ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Cleanup credentials
+        if: always()
+        run: rm -f service_account.json
