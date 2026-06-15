@@ -3,10 +3,11 @@ src/pipeline.py
 ---------------
 Orchestrates the full Funding & Grant Intelligence pipeline:
   1. Fetch articles (RSS + scrape)
-  2. Extract leads via Gemini
+  2. Extract leads via Groq AI
+  2.5. Enrich leads with website/LinkedIn (Apify)
   3. Deduplicate
   4. Score and rank
-  5. Write to Google Sheets or CSV fallback
+  5. Write to Google Sheets + CSV
   6. Prune old dedup records
 """
 
@@ -55,6 +56,7 @@ from src.extractor import extract_all_leads
 from src.deduplicator import remove_duplicates, clear_old_records
 from src.scorer import score_all_leads
 from src.sheets import write_leads_to_sheet, write_leads_to_csv_fallback
+from src.apify import enrich_leads_with_apify
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +92,7 @@ def run_pipeline() -> dict:
         return _summary(run_ts, 0, 0, 0, 0, start_time, log_file)
 
     # ------------------------------------------------------------------ Step 2
-    logger.info("STEP 2: Extracting leads via Gemini...")
+    logger.info("STEP 2: Extracting leads via Groq AI...")
     leads = extract_all_leads(articles)
     n_extracted = len(leads)
     logger.info("Leads extracted: %d", n_extracted)
@@ -98,6 +100,15 @@ def run_pipeline() -> dict:
     if n_extracted == 0:
         logger.warning("No leads extracted. Pipeline ending early.")
         return _summary(run_ts, n_articles, 0, 0, 0, start_time, log_file)
+
+    # Optional enrichment with Apify (or local fallback inside apify.py)
+    try:
+        if os.environ.get("APIFY_API_TOKEN"):
+            logger.info("STEP 2.5: Enriching leads (Apify/local fallback)...")
+            leads = enrich_leads_with_apify(leads)
+            logger.info("Enrichment complete.")
+    except Exception as exc:
+        logger.warning("Apify enrichment failed: %s", exc)
 
     # ------------------------------------------------------------------ Step 3
     logger.info("STEP 3: Deduplicating leads...")
