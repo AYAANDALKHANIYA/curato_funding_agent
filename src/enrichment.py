@@ -1,11 +1,11 @@
 """
-src/apify.py
-------------
+src/enrichment.py
+-----------------
 Data enrichment: fills in missing website_url and linkedin_url for leads.
 
-Strategy (in order):
-  1. If APIFY_API_TOKEN is set, use the Apify Google Search Results Scraper
-     actor to search for the company's website and LinkedIn page.
+Strategy:
+  1. If SERPER_API_KEY is set, use Serper.dev to search Google for the 
+     company's website and LinkedIn page.
   2. Fallback: scan the source article page for company website links
      and LinkedIn anchors using BeautifulSoup.
 """
@@ -13,7 +13,7 @@ Strategy (in order):
 import logging
 import os
 import re
-import time
+import json
 from typing import List, Optional
 
 import requests
@@ -23,61 +23,53 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-APIFY_TOKEN = os.environ.get("APIFY_API_TOKEN", "").strip()
+SERPER_API_KEY = os.environ.get("SERPER_API_KEY", "").strip()
 USER_AGENT = "Mozilla/5.0 (compatible; FundingAgent/1.0)"
 REQUEST_TIMEOUT = 15
 
-# Apify actor for Google Search scraping
-_GOOGLE_SEARCH_ACTOR = "apify/google-search-scraper"
-
-
 # ---------------------------------------------------------------------------
-# Apify Google Search enrichment
+# Serper.dev Google Search enrichment
 # ---------------------------------------------------------------------------
 
-def _apify_google_search(query: str, max_results: int = 3) -> list:
+def _serper_search(query: str, num_results: int = 5) -> list:
     """
-    Run the Apify Google Search Scraper actor synchronously and return
-    a list of organic result URLs.
-
-    Returns an empty list on any failure.
+    Run a Google Search via Serper.dev and return organic result URLs.
     """
-    if not APIFY_TOKEN:
+    if not SERPER_API_KEY:
         return []
 
+    url = "https://google.serper.dev/search"
+    payload = json.dumps({
+        "q": query,
+        "num": num_results
+    })
+    headers = {
+        'X-API-KEY': SERPER_API_KEY,
+        'Content-Type': 'application/json'
+    }
+
     try:
-        from apify_client import ApifyClient
-        client = ApifyClient(APIFY_TOKEN)
-
-        run_input = {
-            "queries": query,
-            "maxPagesPerQuery": 1,
-            "resultsPerPage": max_results,
-            "languageCode": "en",
-            "mobileResults": False,
-        }
-
-        logger.debug("Apify search: %s", query)
-        run = client.actor(_GOOGLE_SEARCH_ACTOR).call(run_input=run_input)
+        logger.debug("Serper search: %s", query)
+        resp = requests.post(url, headers=headers, data=payload, timeout=REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
 
         urls = []
-        for item in client.dataset(run["defaultDatasetId"]).iterate_items():
-            organic = item.get("organicResults", [])
-            for result in organic:
-                url = result.get("url", "")
-                if url:
-                    urls.append(url)
+        for result in data.get("organic", []):
+            link = result.get("link", "")
+            if link:
+                urls.append(link)
         return urls
 
     except Exception as exc:
-        logger.debug("Apify Google Search failed for query '%s': %s", query, exc)
+        logger.debug("Serper search failed for query '%s': %s", query, exc)
         return []
 
 
-def _find_website_via_apify(company_name: str) -> Optional[str]:
-    """Search Google for the company's official website via Apify."""
+def _find_website_via_serper(company_name: str) -> Optional[str]:
+    """Search Google for the company's official website via Serper."""
     query = f"{company_name} official website"
-    results = _apify_google_search(query, max_results=5)
+    results = _serper_search(query, num_results=5)
 
     # Filter out news sites, social media, and known non-company domains
     skip_domains = {
@@ -85,7 +77,7 @@ def _find_website_via_apify(company_name: str) -> Optional[str]:
         "instagram.com", "youtube.com", "crunchbase.com",
         "techcrunch.com", "inc42.com", "yourstory.com", "entrackr.com",
         "vccircle.com", "wikipedia.org", "bloomberg.com", "reuters.com",
-        "economictimes.com", "livemint.com", "moneycontrol.com",
+        "economictimes.com", "livemint.com", "moneycontrol.com", "pitchbook.com",
     }
 
     for url in results:
@@ -99,10 +91,10 @@ def _find_website_via_apify(company_name: str) -> Optional[str]:
     return None
 
 
-def _find_linkedin_via_apify(company_name: str) -> Optional[str]:
-    """Search Google for the company's LinkedIn page via Apify."""
+def _find_linkedin_via_serper(company_name: str) -> Optional[str]:
+    """Search Google for the company's LinkedIn page via Serper."""
     query = f"{company_name} LinkedIn company page"
-    results = _apify_google_search(query, max_results=5)
+    results = _serper_search(query, num_results=5)
 
     # First pass: look specifically for a company page
     for url in results:
@@ -125,8 +117,6 @@ def _local_extract(source_url: str, company_name: str) -> dict:
     """
     Attempt to extract the company website and LinkedIn URL from the
     source article page by scanning all anchor tags.
-
-    This is a best-effort fallback when Apify is not available.
     """
     result = {"website_url": None, "linkedin_url": None}
 
@@ -169,7 +159,6 @@ def _local_extract(source_url: str, company_name: str) -> dict:
             # Company website: match domain against company name
             if not result["website_url"] and domain:
                 if not any(skip in domain for skip in skip_domains):
-                    # Simple heuristic: check if domain contains part of company name
                     domain_base = domain.split(".")[0]
                     name_parts = re.split(r"[\s\-_]+", company_lower)
                     if any(part in domain_base for part in name_parts if len(part) > 2):
@@ -188,27 +177,16 @@ def _local_extract(source_url: str, company_name: str) -> dict:
 # Public API
 # ---------------------------------------------------------------------------
 
-def enrich_leads_with_apify(leads: List[dict]) -> List[dict]:
+def enrich_leads(leads: List[dict]) -> List[dict]:
     """
     Enrich a list of lead dicts by filling in missing website_url and
     linkedin_url fields.
-
-    Strategy:
-      - If APIFY_API_TOKEN is configured, use Apify Google Search Scraper.
-      - Otherwise, fall back to local article-page scraping.
-      - Leads that already have both fields populated are skipped.
-
-    Args:
-        leads: list of lead dicts from the extractor.
-
-    Returns:
-        The same list with website_url and linkedin_url populated where possible.
     """
     if not leads:
         return []
 
-    use_apify = bool(APIFY_TOKEN)
-    method = "Apify Google Search" if use_apify else "local article scraping"
+    use_serper = bool(SERPER_API_KEY)
+    method = "Serper.dev Search" if use_serper else "local article scraping"
     logger.info("Enriching %d leads using %s...", len(leads), method)
 
     enriched = []
@@ -227,22 +205,19 @@ def enrich_leads_with_apify(leads: List[dict]) -> List[dict]:
 
         logger.info("[%d] Enriching: %s", i, company[:60])
 
-        if use_apify and company:
-            # Use Apify Google Search
+        if use_serper and company:
+            # Use Serper Google Search
             if not has_website:
-                website = _find_website_via_apify(company)
+                website = _find_website_via_serper(company)
                 if website:
                     lead["website_url"] = website
                     logger.info("  -> Website found: %s", website)
 
             if not has_linkedin:
-                linkedin = _find_linkedin_via_apify(company)
+                linkedin = _find_linkedin_via_serper(company)
                 if linkedin:
                     lead["linkedin_url"] = linkedin
                     logger.info("  -> LinkedIn found: %s", linkedin)
-
-            # Rate limiting for Apify
-            time.sleep(2.0)
 
         # Local fallback for any still-missing fields
         if not lead.get("website_url") or not lead.get("linkedin_url"):

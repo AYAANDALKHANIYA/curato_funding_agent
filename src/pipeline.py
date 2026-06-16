@@ -4,7 +4,7 @@ src/pipeline.py
 Orchestrates the full Funding & Grant Intelligence pipeline:
   1. Fetch articles (RSS + scrape)
   2. Extract leads via Groq AI
-  2.5. Enrich leads with website/LinkedIn (Apify)
+  2.5. Enrich leads with website/LinkedIn (Serper.dev)
   3. Deduplicate
   4. Score and rank
   5. Write to Google Sheets + CSV
@@ -53,10 +53,10 @@ def _setup_logging() -> None:
 # ---------------------------------------------------------------------------
 from src.scraper import fetch_all_articles
 from src.extractor import extract_all_leads
+from src.enrichment import enrich_leads
 from src.deduplicator import remove_duplicates, clear_old_records
 from src.scorer import score_all_leads
 from src.sheets import write_leads_to_sheet, write_leads_to_csv_fallback
-from src.apify import enrich_leads_with_apify
 
 logger = logging.getLogger(__name__)
 
@@ -101,12 +101,11 @@ def run_pipeline() -> dict:
         logger.warning("No leads extracted. Pipeline ending early.")
         return _summary(run_ts, n_articles, 0, 0, 0, start_time, log_file)
 
-    # Optional enrichment with Apify (or local fallback inside apify.py)
+    # Optional enrichment with Serper (or local fallback inside enrichment.py)
     try:
-        if os.environ.get("APIFY_API_TOKEN"):
-            logger.info("STEP 2.5: Enriching leads (Apify/local fallback)...")
-            leads = enrich_leads_with_apify(leads)
-            logger.info("Enrichment complete.")
+        logger.info("STEP 2.5: Enriching leads (Serper.dev/local fallback)...")
+        leads = enrich_leads(leads)
+        logger.info("Enrichment complete.")
     except Exception as exc:
         logger.warning("Apify enrichment failed: %s", exc)
 

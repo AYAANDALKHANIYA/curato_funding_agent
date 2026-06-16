@@ -15,6 +15,11 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from dotenv import load_dotenv
+import gspread
+from google.oauth2.service_account import Credentials
+
+load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Page config — must be the very first Streamlit call
@@ -173,13 +178,33 @@ PLOTLY_PALETTE = ["#6366f1", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981",
 # ---------------------------------------------------------------------------
 @st.cache_data(ttl=300)  # 5-minute cache
 def load_data() -> pd.DataFrame:
-    """Load and clean the leads CSV. Returns empty DataFrame if not found."""
-    if not os.path.exists(CSV_PATH):
+    """Load and clean the leads from Google Sheets. Returns empty DataFrame if not found."""
+    sheet_id = os.environ.get("GOOGLE_SHEET_ID")
+    json_path = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "service_account.json")
+    
+    if not sheet_id or not json_path:
+        st.warning("Google Sheets credentials not found in .env")
         return pd.DataFrame()
 
+    if not os.path.isabs(json_path):
+        json_path = os.path.join(_SCRIPT_DIR, json_path)
+
     try:
-        df = pd.read_csv(CSV_PATH, dtype=str)
-    except Exception:
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        creds = Credentials.from_service_account_file(json_path, scopes=scopes)
+        client = gspread.authorize(creds)
+        doc = client.open_by_key(sheet_id)
+        
+        all_records = []
+        for ws in doc.worksheets():
+            all_records.extend(ws.get_all_records())
+            
+        df = pd.DataFrame(all_records)
+    except Exception as exc:
+        st.error(f"Error loading Google Sheets: {exc}")
         return pd.DataFrame()
 
     if df.empty:
