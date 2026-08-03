@@ -85,6 +85,7 @@ With your new project selected:
    GEMINI_API_KEY=AIza...your_actual_key...
    GOOGLE_SHEET_ID=1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms
    GOOGLE_SERVICE_ACCOUNT_JSON=service_account.json
+   APOLLO_API_KEY=your_apollo_key_here
    RUN_TIME=09:00
    ```
 

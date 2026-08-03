@@ -24,6 +24,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 SERPER_API_KEY = os.environ.get("SERPER_API_KEY", "").strip()
+APOLLO_API_KEY = os.environ.get("APOLLO_API_KEY", "").strip()
 USER_AGENT = "Mozilla/5.0 (compatible; FundingAgent/1.0)"
 REQUEST_TIMEOUT = 15
 
@@ -174,6 +175,62 @@ def _local_extract(source_url: str, company_name: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Apollo.io B2B Enrichment
+# ---------------------------------------------------------------------------
+
+def _apollo_find_contacts(domain: str) -> list:
+    """
+    Use Apollo.io to find specific marketing/executive roles at the given domain.
+    Returns a list of dicts: {"name": str, "title": str, "email": str, "linkedin_url": str}
+    """
+    if not APOLLO_API_KEY or not domain:
+        return []
+
+    url = "https://api.apollo.io/api/v1/mixed_people/search"
+    headers = {"Content-Type": "application/json", "Cache-Control": "no-cache"}
+    
+    # We are looking for marketing roles and the CEO
+    payload = {
+        "api_key": APOLLO_API_KEY,
+        "q_organization_domains": domain,
+        "person_titles": [
+            "cmo", "chief marketing officer", "vp marketing", 
+            "vice president of marketing", "director of marketing", 
+            "brand manager", "product marketing", "senior brand manager",
+            "ceo", "chief executive officer", "founder"
+        ],
+        "per_page": 5
+    }
+
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+
+        contacts = []
+        for person in data.get("people", []):
+            name = person.get("name", "")
+            title = person.get("title", "")
+            email = person.get("email", "")
+            linkedin = person.get("linkedin_url", "")
+            
+            # If email is not available directly, Apollo might have it hidden or requires credits to unlock.
+            # Usually the search endpoint returns the email if available in the DB for free tier if not gated.
+            # Even without email, name and title are valuable.
+            if name:
+                contacts.append({
+                    "name": name,
+                    "title": title,
+                    "email": email,
+                    "linkedin_url": linkedin
+                })
+        return contacts
+    except Exception as exc:
+        logger.debug("Apollo API search failed for domain '%s': %s", domain, exc)
+        return []
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -228,6 +285,50 @@ def enrich_leads(leads: List[dict]) -> List[dict]:
             if local.get("linkedin_url") and not lead.get("linkedin_url"):
                 lead["linkedin_url"] = local["linkedin_url"]
                 logger.info("  -> LinkedIn (local fallback): %s", local["linkedin_url"])
+
+        # Fetch Contacts via Apollo.io
+        lead["key_contacts"] = lead.get("key_contacts", [])
+        if lead.get("website_url") and APOLLO_API_KEY:
+            from urllib.parse import urlparse
+            domain = urlparse(lead["website_url"]).netloc.lower().replace("www.", "")
+            if domain:
+                logger.info("  -> Finding contacts via Apollo for domain: %s", domain)
+                apollo_contacts = _apollo_find_contacts(domain)
+                if apollo_contacts:
+                    logger.info("  -> Found %d contacts via Apollo", len(apollo_contacts))
+                    # Merge with existing people extracted from article
+                    existing_names = {c.get("name", "").lower() for c in lead["key_contacts"] if isinstance(c, dict)}
+                    for ac in apollo_contacts:
+                        if ac["name"].lower() not in existing_names:
+                            lead["key_contacts"].append(ac)
+                        else:
+                            # Update existing contact with email if found
+                            for ec in lead["key_contacts"]:
+                                if isinstance(ec, dict) and ec.get("name", "").lower() == ac["name"].lower():
+                                    if ac.get("email") and not ec.get("email"):
+                                        ec["email"] = ac["email"]
+                                    if ac.get("title") and not ec.get("title"):
+                                        ec["title"] = ac["title"]
+                                    if ac.get("linkedin_url") and not ec.get("linkedin_url"):
+                                        ec["linkedin_url"] = ac["linkedin_url"]
+
+        # Format key_contacts into a readable string for Google Sheets
+        contacts_str_list = []
+        for c in lead["key_contacts"]:
+            if isinstance(c, dict):
+                c_name = c.get("name", "")
+                c_title = c.get("title", "Executive")
+                c_email = c.get("email", "")
+                
+                parts = []
+                parts.append(f"{c_name} ({c_title})")
+                if c_email:
+                    parts.append(f"Email: {c_email}")
+                contacts_str_list.append(" - ".join(parts))
+            elif isinstance(c, str):
+                contacts_str_list.append(c)
+
+        lead["contacts_formatted"] = "\n".join(contacts_str_list)
 
         enriched.append(lead)
 

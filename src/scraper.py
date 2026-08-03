@@ -12,13 +12,14 @@ from email.utils import parsedate_to_datetime
 
 import feedparser
 import requests
+import cloudscraper
 from bs4 import BeautifulSoup
 
 from config.sources import RSS_SOURCES, SCRAPE_SOURCES, FUNDING_KEYWORDS
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "Mozilla/5.0 (compatible; FundingAgent/1.0)"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 REQUEST_TIMEOUT = 15
 MAX_ARTICLES_PER_SCRAPE = 20
 
@@ -96,8 +97,9 @@ def _get_article_text(url: str) -> str:
     Returns up to 3000 characters of clean text.
     """
     try:
+        scraper = cloudscraper.create_scraper()
         headers = {"User-Agent": USER_AGENT}
-        resp = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+        resp = scraper.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "lxml")
 
@@ -151,7 +153,11 @@ def fetch_rss(source: dict) -> list:
     logger.info("Fetching RSS: %s (%s)", name, url)
 
     try:
-        feed = feedparser.parse(url, agent=USER_AGENT, request_headers={"User-Agent": USER_AGENT})
+        scraper = cloudscraper.create_scraper()
+        headers = {"User-Agent": USER_AGENT}
+        resp = scraper.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        feed = feedparser.parse(resp.text)
     except Exception as exc:
         logger.error("RSS parse error for %s: %s", name, exc)
         return []
@@ -218,8 +224,9 @@ def fetch_scrape(source: dict) -> list:
     logger.info("Scraping: %s (%s)", name, url)
 
     try:
+        scraper = cloudscraper.create_scraper()
         headers = {"User-Agent": USER_AGENT}
-        resp = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+        resp = scraper.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
         resp.raise_for_status()
     except Exception as exc:
         logger.error("HTTP error scraping %s: %s", name, exc)

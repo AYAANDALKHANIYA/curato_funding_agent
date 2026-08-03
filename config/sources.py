@@ -51,7 +51,7 @@ RSS_SOURCES = [
 SCRAPE_SOURCES = [
     {
         "name": "Entrackr Funding",
-        "url": "https://entrackr.com/category/funding/",
+        "url": "https://entrackr.com/",
         "article_selector": "article",
         "title_selector": "h2, h3",
         "link_selector": "a",

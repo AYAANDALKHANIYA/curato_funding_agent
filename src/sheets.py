@@ -23,38 +23,20 @@ SCOPES = [
 ]
 
 SHEET_HEADERS = [
-    "Company Name",
+    "COMPANY NAME",
     "Website",
     "LinkedIn",
-    "Location",
-    "Industry",
-    "Company Stage",
-    "Announcement Type",
-    "Funding/Grant Amount",
-    "Announcement Date",
-    "Source URL",
-    "Lead Score",
-    "Why This Lead?",
-    "Source Name",
-    "Collected At",
+    "Source Url",
+    "Collected at",
 ]
 
 # Mapping: SHEET_HEADERS label → lead dict key
 _HEADER_TO_KEY = {
-    "Company Name": "company_name",
+    "COMPANY NAME": "company_name",
     "Website": "website_url",
     "LinkedIn": "linkedin_url",
-    "Location": "location",
-    "Industry": "industry",
-    "Company Stage": "company_stage",
-    "Announcement Type": "announcement_type",
-    "Funding/Grant Amount": "funding_amount",
-    "Announcement Date": "announcement_date",
-    "Source URL": "source_url",
-    "Lead Score": "lead_score",
-    "Why This Lead?": "why_this_lead",
-    "Source Name": "source_name",
-    "Collected At": None,  # generated at write time
+    "Source Url": "source_url",
+    "Collected at": None,  # generated at write time
 }
 
 
@@ -90,7 +72,7 @@ def _lead_to_row(lead: dict) -> list:
     now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
     row = []
     for header in SHEET_HEADERS:
-        if header == "Collected At":
+        if header == "Collected at":
             row.append(now_str)
         else:
             key = _HEADER_TO_KEY.get(header)
@@ -189,7 +171,7 @@ def write_leads_to_csv_fallback(leads: list, path: str = None) -> int:
         for lead in leads:
             row = {header: "" for header in SHEET_HEADERS}
             for header in SHEET_HEADERS:
-                if header == "Collected At":
+                if header == "Collected at":
                     row[header] = now_str
                 else:
                     key = _HEADER_TO_KEY.get(header)
@@ -199,3 +181,71 @@ def write_leads_to_csv_fallback(leads: list, path: str = None) -> int:
 
     logger.info("Wrote %d leads to CSV: %s", len(leads), path)
     return len(leads)
+
+
+def write_people_to_sheet(people: list) -> int:
+    """
+    Write enriched people to the 'People' worksheet.
+    Skips duplicates based on Company Name.
+    """
+    if not people:
+        return 0
+
+    sheet_id = os.environ.get("GOOGLE_SHEET_ID", "")
+    if not sheet_id:
+        return 0
+
+    try:
+        client = _get_client()
+        spreadsheet = client.open_by_key(sheet_id)
+        
+        worksheet = None
+        for ws in spreadsheet.worksheets():
+            if ws.title.lower() == "people":
+                worksheet = ws
+                break
+                
+        if not worksheet:
+            logger.error("Failed to open People worksheet: tab not found")
+            return 0
+            
+    except Exception as exc:
+        logger.error("Failed to open People worksheet: %s", exc)
+        return 0
+
+    try:
+        existing_companies = set()
+        col_values = worksheet.col_values(1)
+        for val in col_values[1:]:
+            if val:
+                existing_companies.add(val.strip().lower())
+    except Exception as exc:
+        logger.error("Failed to fetch existing companies from People worksheet: %s", exc)
+        return 0
+
+    rows_to_append = []
+    for person in people:
+        if not person:
+            continue
+        company = person.get("Company Name", "").strip()
+        if company and company.lower() not in existing_companies:
+            row = [
+                company,
+                person.get("Person Name", ""),
+                person.get("Designation", ""),
+                person.get("LinkedIn Profile", ""),
+                person.get("Public Email", ""),
+                person.get("Collected At", "")
+            ]
+            rows_to_append.append(row)
+            existing_companies.add(company.lower())
+
+    if rows_to_append:
+        try:
+            worksheet.append_rows(rows_to_append, value_input_option="USER_ENTERED")
+            logger.info("Wrote %d rows to People worksheet.", len(rows_to_append))
+        except Exception as exc:
+            logger.error("Failed to append rows to People worksheet: %s", exc)
+
+    return len(rows_to_append)
+

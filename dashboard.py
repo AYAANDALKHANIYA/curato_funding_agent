@@ -164,7 +164,7 @@ EXPECTED_COLUMNS = [
     "Company Name", "Website", "LinkedIn", "Location", "Industry",
     "Company Stage", "Announcement Type", "Funding/Grant Amount",
     "Announcement Date", "Source URL", "Lead Score", "Why This Lead?",
-    "Source Name", "Collected At",
+    "Source Name", "Collected At", "CEO Name", "Contact Email",
 ]
 
 ALL_STAGES = ["Idea", "MVP", "Early Revenue", "Growth", "Scale", "Enterprise"]
@@ -466,7 +466,7 @@ with tab1:
     display_cols = [
         "Lead Score", "Company Name", "Website", "Announcement Type",
         "Funding/Grant Amount", "Industry", "Location", "Company Stage",
-        "Announcement Date", "Why This Lead?", "Source Name", "Source URL", "LinkedIn",
+        "Announcement Date", "Why This Lead?", "CEO Name", "Contact Email", "Source Name", "Source URL", "LinkedIn",
     ]
 
     df_display = df[[c for c in display_cols if c in df.columns]].copy()
@@ -497,6 +497,8 @@ with tab1:
         "Company Stage": st.column_config.TextColumn("Stage", width="small"),
         "Announcement Date": st.column_config.TextColumn("Date", width="small"),
         "Why This Lead?": st.column_config.TextColumn("Why This Lead?", width="large"),
+        "CEO Name": st.column_config.TextColumn("CEO", width="medium"),
+        "Contact Email": st.column_config.TextColumn("Email", width="medium"),
         "Source Name": st.column_config.TextColumn("Source", width="medium"),
     }
 

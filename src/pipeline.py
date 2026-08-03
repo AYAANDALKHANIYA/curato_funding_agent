@@ -56,7 +56,8 @@ from src.extractor import extract_all_leads
 from src.enrichment import enrich_leads
 from src.deduplicator import remove_duplicates, clear_old_records
 from src.scorer import score_all_leads
-from src.sheets import write_leads_to_sheet, write_leads_to_csv_fallback
+from src.sheets import write_leads_to_sheet, write_leads_to_csv_fallback, write_people_to_sheet
+from src.people_enricher import extract_best_person
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,22 @@ def run_pipeline() -> dict:
         try:
             n_written = write_leads_to_sheet(scored_leads)
             logger.info("Wrote %d leads to Google Sheets.", n_written)
+            
+            # --- People Enrichment Step ---
+            try:
+                people_to_write = []
+                for lead in scored_leads:
+                    person = extract_best_person(lead)
+                    if person:
+                        people_to_write.append(person)
+                
+                if people_to_write:
+                    logger.info("STEP 5.5: Writing People to output...")
+                    n_people = write_people_to_sheet(people_to_write)
+                    logger.info("Wrote %d people to Google Sheets.", n_people)
+            except Exception as exc:
+                logger.error("Failed during People enrichment/write: %s", exc)
+
         except Exception as exc:
             logger.error("Google Sheets write failed: %s.", exc)
             n_written = n_written_csv

@@ -46,7 +46,13 @@ JSON schema:
   "company_name": "string or null",
   "website_url": "string or null",
   "linkedin_url": "string or null",
-  "location": "string or null (city, country)",
+  "location": "string or null (extract any mentioned location: city, state, or country. If not mentioned, infer from context if possible, else null)",
+  "key_contacts": [
+    {
+      "name": "string",
+      "title": "string (e.g., CEO, Founder, CMO, VP Marketing)"
+    }
+  ],
   "industry": "string or null",
   "announcement_type": "one of: Grant | Accelerator Grant | Innovation Grant | Angel Investment | Pre-Seed | Seed | Series A | Series B | Series C | Growth Round | Scale-Up Funding | Strategic Investment | Venture Debt | null",
   "funding_amount": "string or null (e.g. '$3M', 'Rs 50 Cr', 'undisclosed')",
@@ -138,6 +144,7 @@ Return JSON only."""
         "website_url": data.get("website_url"),
         "linkedin_url": data.get("linkedin_url"),
         "location": data.get("location"),
+        "key_contacts": data.get("key_contacts", []),
         "industry": data.get("industry"),
         "announcement_type": data.get("announcement_type"),
         "funding_amount": data.get("funding_amount"),
