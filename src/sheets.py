@@ -235,7 +235,8 @@ def write_people_to_sheet(people: list) -> int:
                 person.get("Designation", ""),
                 person.get("LinkedIn Profile", ""),
                 person.get("Public Email", ""),
-                person.get("Collected At", "")
+                person.get("Collected At", ""),
+                person.get("Compose Email", "")
             ]
             rows_to_append.append(row)
             existing_companies.add(company.lower())

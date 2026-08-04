@@ -58,6 +58,7 @@ from src.deduplicator import remove_duplicates, clear_old_records
 from src.scorer import score_all_leads
 from src.sheets import write_leads_to_sheet, write_leads_to_csv_fallback, write_people_to_sheet
 from src.people_enricher import extract_best_person
+from src.email_generator import generate_compose_link
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +143,8 @@ def run_pipeline() -> dict:
                 for lead in scored_leads:
                     person = extract_best_person(lead)
                     if person:
+                        compose_link = generate_compose_link(person, lead)
+                        person["Compose Email"] = compose_link
                         people_to_write.append(person)
                 
                 if people_to_write:

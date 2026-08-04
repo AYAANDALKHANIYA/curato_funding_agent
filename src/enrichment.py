@@ -110,6 +110,17 @@ def _find_linkedin_via_serper(company_name: str) -> Optional[str]:
     return None
 
 
+def _find_person_linkedin_via_serper(person_name: str, company_name: str) -> Optional[str]:
+    """Search Google for the person's LinkedIn page via Serper."""
+    query = f'site:linkedin.com/in "{person_name}" "{company_name}"'
+    results = _serper_search(query, num_results=5)
+
+    for url in results:
+        if "linkedin.com/in" in url.lower():
+            return url
+
+    return None
+
 # ---------------------------------------------------------------------------
 # Local fallback enrichment (no API needed)
 # ---------------------------------------------------------------------------
@@ -312,6 +323,17 @@ def enrich_leads(leads: List[dict]) -> List[dict]:
                                     if ac.get("linkedin_url") and not ec.get("linkedin_url"):
                                         ec["linkedin_url"] = ac["linkedin_url"]
 
+        # Fallback for missing person LinkedIn IDs
+        if use_serper and company:
+            for c in lead["key_contacts"]:
+                if isinstance(c, dict):
+                    if c.get("name") and not c.get("linkedin_url"):
+                        logger.info("  -> Fallback LinkedIn search for person: %s", c.get("name"))
+                        li = _find_person_linkedin_via_serper(c.get("name"), company)
+                        if li:
+                            c["linkedin_url"] = li
+                            logger.info("  -> Found person LinkedIn: %s", li)
+
         # Format key_contacts into a readable string for Google Sheets
         contacts_str_list = []
         for c in lead["key_contacts"]:
@@ -319,11 +341,14 @@ def enrich_leads(leads: List[dict]) -> List[dict]:
                 c_name = c.get("name", "")
                 c_title = c.get("title", "Executive")
                 c_email = c.get("email", "")
+                c_linkedin = c.get("linkedin_url", "")
                 
                 parts = []
                 parts.append(f"{c_name} ({c_title})")
                 if c_email:
                     parts.append(f"Email: {c_email}")
+                if c_linkedin:
+                    parts.append(f"LinkedIn: {c_linkedin}")
                 contacts_str_list.append(" - ".join(parts))
             elif isinstance(c, str):
                 contacts_str_list.append(c)
