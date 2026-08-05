@@ -30,11 +30,9 @@ Are you open to a brief chat next week to see if we'd be a good fit for your cur
 def generate_compose_link(person: dict, lead: dict) -> str:
     """
     Generate a personalized Gmail compose link for the given person and lead.
-    If the person lacks a public email, return an empty string.
+    If the person lacks a public email, it will still generate a compose link with a blank 'To' field.
     """
     email = person.get("Public Email", "").strip()
-    if not email:
-        return ""
         
     if _client is None:
         logger.error("Groq client not initialized — skipping email generation.")
