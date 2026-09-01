@@ -21,7 +21,7 @@ if _GROQ_API_KEY:
 else:
     _client = None
 
-_MODEL = "llama-3.3-70b-versatile"
+_MODEL = "llama-3.1-70b-versatile"
 
 CURATO_TEMPLATE = """We help fast-growing startups like yours scale their brand, messaging, and digital presence to match their momentum. 
 
