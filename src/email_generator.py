@@ -21,7 +21,7 @@ if _GROQ_API_KEY:
 else:
     _client = None
 
-_MODEL = "llama3-70b-8192"
+_MODEL = "openai/gpt-oss-120b"
 
 CURATO_TEMPLATE = """We help fast-growing startups like yours scale their brand, messaging, and digital presence to match their momentum. 
 

@@ -27,7 +27,7 @@ else:
     _client = None
     logger.warning("GROQ_API_KEY not set — extraction will return empty results.")
 
-_MODEL = "llama3-70b-8192"
+_MODEL = "openai/gpt-oss-120b"
 
 # ---------------------------------------------------------------------------
 # Prompt template
