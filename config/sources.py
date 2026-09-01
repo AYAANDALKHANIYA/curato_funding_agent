@@ -25,7 +25,7 @@ RSS_SOURCES = [
     },
     {
         "name": "Entrackr",
-        "url": "https://entrackr.com/feed/",
+        "url": "https://entrackr.com/rss",
         "filter_keywords": ["funding", "raises", "seed", "series", "grant", "investment", "venture"],
     },
     {

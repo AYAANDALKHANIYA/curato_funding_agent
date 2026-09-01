@@ -197,12 +197,15 @@ def _apollo_find_contacts(domain: str) -> list:
     if not APOLLO_API_KEY or not domain:
         return []
 
-    url = "https://api.apollo.io/api/v1/mixed_people/search"
-    headers = {"Content-Type": "application/json", "Cache-Control": "no-cache"}
+    url = "https://api.apollo.io/api/v1/people/search"
+    headers = {
+        "Content-Type": "application/json", 
+        "Cache-Control": "no-cache",
+        "X-Api-Key": APOLLO_API_KEY
+    }
     
     # We are looking for marketing roles and the CEO
     payload = {
-        "api_key": APOLLO_API_KEY,
         "q_organization_domains": domain,
         "person_titles": [
             "cmo", "chief marketing officer", "vp marketing", 
