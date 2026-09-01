@@ -27,7 +27,7 @@ else:
     _client = None
     logger.warning("GROQ_API_KEY not set — extraction will return empty results.")
 
-_MODEL = "llama-3.3-70b-versatile"
+_MODEL = "llama-3.1-70b-versatile"
 
 # ---------------------------------------------------------------------------
 # Prompt template
