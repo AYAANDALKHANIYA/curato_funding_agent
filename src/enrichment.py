@@ -197,7 +197,7 @@ def _apollo_find_contacts(domain: str) -> list:
     if not APOLLO_API_KEY or not domain:
         return []
 
-    url = "https://api.apollo.io/api/v1/people/search"
+    url = "https://api.apollo.io/api/v1/mixed_people/api_search"
     headers = {
         "Content-Type": "application/json", 
         "Cache-Control": "no-cache",
@@ -222,15 +222,33 @@ def _apollo_find_contacts(domain: str) -> list:
         data = resp.json()
 
         contacts = []
-        for person in data.get("people", []):
-            name = person.get("name", "")
-            title = person.get("title", "")
-            email = person.get("email", "")
-            linkedin = person.get("linkedin_url", "")
+        for p in data.get("people", []):
+            name = p.get("name", "")
+            if not name and p.get("first_name"):
+                name = p.get("first_name")
             
-            # If email is not available directly, Apollo might have it hidden or requires credits to unlock.
-            # Usually the search endpoint returns the email if available in the DB for free tier if not gated.
-            # Even without email, name and title are valuable.
+            title = p.get("title", "")
+            email = p.get("email", "")
+            linkedin = p.get("linkedin_url", "")
+            
+            # If search didn't return email, unlock via people/match
+            if not email and p.get("has_email"):
+                match_url = "https://api.apollo.io/api/v1/people/match"
+                match_payload = {"id": p.get("id")}
+                try:
+                    m_resp = requests.post(match_url, headers=headers, json=match_payload, timeout=REQUEST_TIMEOUT)
+                    if m_resp.status_code == 200:
+                        m_data = m_resp.json()
+                        person_obj = m_data.get("person", {})
+                        if person_obj.get("email"):
+                            email = person_obj.get("email")
+                        if person_obj.get("name"):
+                            name = person_obj.get("name")
+                        if person_obj.get("linkedin_url"):
+                            linkedin = person_obj.get("linkedin_url")
+                except Exception as exc:
+                    logger.debug("Apollo Match API failed for person '%s': %s", name, exc)
+            
             if name:
                 contacts.append({
                     "name": name,
